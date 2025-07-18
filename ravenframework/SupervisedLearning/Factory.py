@@ -31,6 +31,7 @@ from .SyntheticHistory   import SyntheticHistory
 from .MultiResolutionTSA import MultiResolutionTSA
 from .pickledROM         import pickledROM
 from .PolyExponential    import PolyExponential
+from .SINDy              import SINDy
 
 ## Dynamic Mode Decomposition-based methods
 from .DMD.DynamicModeDecompositionControl import DMDC
