@@ -18,5 +18,5 @@
 #   Created on July 31, 2025
 #   @author: gonzrl
 # """
-# # These lines ensure that we do not have to do something like:
+
 from .SINDyBase import SINDyBase
