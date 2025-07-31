@@ -57,7 +57,6 @@ class SINDyRegression(SINDyBase):
       @ In, kwargs, dict, an arbitrary dictionary of keywords and values
     """
     super().__init__()
-
     self.uniqueVals = None # flag to indicate targets only have a single unique value
 
   def _handleInput(self, paramInput): # WHY DO I NEED THIS FUNCTION?
@@ -82,19 +81,12 @@ class SINDyRegression(SINDyBase):
       self.uniqueVals = None
       self.model.fit(x=featureVals, x_dot=targetVals) # x_dot is y
 
-
-    # print("******************************************************************************")
-    # self.model.print(lhs=self.target) # WHERE SHOULD THIS GO?
-    # print("******************************************************************************")
-
-
   def __evaluateLocal__(self,featureVals):
     """
       Evaluates a point.
       @ In, featureVals, np.array, list of values at which to evaluate the ROM
       @ Out, returnDict, dict, dict of all the target results
     """
-
     if self.uniqueVals is not None:
       outcomes =  self.uniqueVals
     else:

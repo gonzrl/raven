@@ -33,6 +33,31 @@ from ...utils import InputData, InputTypes
 #Internal Modules End--------------------------------------------------------------------------------
 
 
+# ---------------------------------------------------------------------------------------------------
+# ---------------------------------------------------------------------------------------------------
+# QUESTIONS:
+  # - pivotParameterID IS t?
+  # - HOW TO HANDLE CustomLibrary? ParameterizedLibrary?
+  # - WHERE SHOULD THIS GO: self.model.print(lhs=self.target)
+  # - ONLY USE FEATURES WHEN DERIVATIVE INVOLVED?
+  # - USE NORMALIZATION
+  # - IS IT OKAY TO USE "SINDy" AND "Fourier" IN NAMING, DOES IT COMPLY WITH CAMELBACK?
+
+# NOTES:
+  # - USE self.features AND self.target RATHER THAN feature_names INPUT
+
+# TO DO
+  # - CREATE DERIVATIVE ESTIMATION CASE
+  # - USE HistorySet FOR TIME DEPENDENT CASE
+  # - COMPLETE THE REQUIRED FUNCTIONS
+  # - ADD OTHER SINDy PARAMETERS
+  # - ADD DESCRIPTIONS AND COMMENTS
+  # - CHECK WITH DEV FOR CODE FORMATING RULES
+# ---------------------------------------------------------------------------------------------------
+# ---------------------------------------------------------------------------------------------------
+
+
+
 
 
 class SINDyBase(SupervisedLearning):
@@ -56,8 +81,8 @@ class SINDyBase(SupervisedLearning):
     """
 
     super().__init__()
-    self.printTag                           = 'SINDy'                             # Print tag
-    self.model                              = None                                          # the surrogate model itself {'target1':model,'target2':model, etc.}
+    self.printTag                           = 'SINDy'    # Print tag
+    self.model                              = None       # the surrogate model itself {'target1':model,'target2':model, etc.}
 
   @classmethod
   def getInputSpecification(cls):
@@ -70,10 +95,6 @@ class SINDyBase(SupervisedLearning):
     """
     spec = super().getInputSpecification()
     spec.description = r"""Add description"""
-
-    # Questions:
-      # - pivotParameterID is t?
-      # - how to handle custom libraries? ParameterizedLibrary?
 
 
     ## SINDy OPTIMIZERS
@@ -244,9 +265,6 @@ class SINDyBase(SupervisedLearning):
     spec.addSub(addPolynomialFeatureLibrary())
 
     ## OTHER SINDy PARAMETERS
-    # spec.addSub(InputData.parameterInputFactory('feature_names', contentType=InputTypes.StringListType, descr=r"""list of string, length n_input_features,
-    #                                             optional Names for the input features (e.g. ['x', 'y', 'z']). If None, will use ['x0', 'x1', ...].""", default=None))
-    # USE self.features INSTEAD?
     spec.addSub(InputData.parameterInputFactory('t_default', contentType=InputTypes.FloatType, descr=r"""float, optional (default 1)
                                                 Default value for the time step.""", default=1))
     spec.addSub(InputData.parameterInputFactory('discrete_time', contentType=InputTypes.BoolType, descr=r"""boolean, optional (default False)
@@ -319,16 +337,6 @@ class SINDyBase(SupervisedLearning):
                           t_default=tDefault,
                           discrete_time=discreteTime)
 
-  def _localNormalizeData(self,values,names,feat):
-    """
-      Overwrites default normalization procedure.
-      @ In, values, unused
-      @ In, names, unused
-      @ In, feat, feature to normalize
-      @ Out, None
-    """
-    self.muAndSigmaFeatures[feat] = (0.0,1.0)
-
   def _train(self,featureVals,targetVals):
     """
       Perform training on input database stored in featureVals.
@@ -396,10 +404,6 @@ class SINDyBase(SupervisedLearning):
     """
     self.model.fit(x=featureVals)
     # self.model.fit(x=featureVals, x_dot=targetVals)
-    # self.model.fit(targetVals, t=featureVals.squeeze())
-
-
-
 
   def __evaluateLocal__(self,featureVals):
     """
@@ -412,6 +416,17 @@ class SINDyBase(SupervisedLearning):
     # prediction = self.model.predict(featureVals)
     # prediction_flat = prediction.flatten()
     # return {self.features[i]: prediction_flat[i] for i in range(len(self.features))}
+
+
+  def _localNormalizeData(self,values,names,feat):
+    """
+      Overwrites default normalization procedure.
+      @ In, values, unused
+      @ In, names, unused
+      @ In, feat, feature to normalize
+      @ Out, None
+    """
+    self.muAndSigmaFeatures[feat] = (0.0,1.0)
 
   def writeXMLPreamble(self, writeTo, targets = None):
     pass
