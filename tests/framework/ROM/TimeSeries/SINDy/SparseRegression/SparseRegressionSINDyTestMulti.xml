@@ -1,0 +1,163 @@
+<?xml version="1.0" ?>
+<Simulation verbosity="silent">
+
+  <RunInfo>
+    <WorkingDir>.</WorkingDir>
+    <Sequence>generateData,trainRom,sampleRom,plot</Sequence>
+  </RunInfo>
+
+  <Steps>
+    <MultiRun name="generateData">
+      <Input class="DataObjects" type="PointSet">inputPlaceHolder</Input>
+      <Sampler class="Samplers" type="MonteCarlo">sampler</Sampler>
+      <Model class="Models" type="ExternalModel">sparseModel</Model>
+      <Output class="DataObjects" type="PointSet">trainData</Output>
+    </MultiRun>
+    <RomTrainer name="trainRom">
+      <Input class="DataObjects" type="PointSet">trainData</Input>
+      <Output class="Models" type="ROM">theROM</Output>
+    </RomTrainer>
+    <MultiRun name="sampleRom">
+      <Input class="DataObjects" type="PointSet">inputPlaceHolder</Input>
+      <Sampler class="Samplers" type="MonteCarlo">sampler</Sampler>
+      <Model class="Models" type="ROM">theROM</Model>
+      <Output class="DataObjects" type="PointSet">testData</Output>
+    </MultiRun>
+    <IOStep name="plot">
+      <Input class="DataObjects" type="PointSet">trainData</Input>
+      <Input class="DataObjects" type="PointSet">testData</Input>
+      <Output class="OutStreams" type="Plot">plotResultY1</Output>
+      <Output class="OutStreams" type="Plot">plotResultY2</Output>
+    </IOStep>
+  </Steps>
+
+  <Models>
+    <ExternalModel ModuleToLoad="SparseRegressionModelMulti" name="sparseModel" subType="">
+      <inputs>x1,x2</inputs>
+      <outputs>y1,y2</outputs>
+    </ExternalModel>
+    <ROM name="theROM" subType="SINDyRegression">
+      <Features>x1,x2</Features>
+      <Target>y1,y2</Target>
+      <stlqOptimizer>
+        <threshold>0.01</threshold>
+      </stlqOptimizer>
+      <polynomialFeatureLibrary>
+        <degree>4</degree>
+      </polynomialFeatureLibrary>
+      <FourierFeatureLibrary>
+        <n_frequencies>4</n_frequencies>
+      </FourierFeatureLibrary>
+    </ROM>
+  </Models>
+
+  <Samplers>
+    <MonteCarlo name="sampler">
+      <samplerInit>
+        <limit>100</limit>
+        <initialSeed>42</initialSeed>
+      </samplerInit>
+      <variable name="x1">
+        <distribution>uni</distribution>
+      </variable>
+      <variable name="x2">
+        <distribution>uni</distribution>
+      </variable>
+    </MonteCarlo>
+  </Samplers>
+
+  <Distributions>
+    <Uniform name="uni">
+      <lowerBound>-2</lowerBound>
+      <upperBound>2</upperBound>
+    </Uniform>
+  </Distributions>
+
+  <DataObjects>
+    <PointSet name="inputPlaceHolder">
+      <Input>x1,x2</Input>
+    </PointSet>
+    <PointSet name="trainData">
+      <Input>x1,x2</Input>
+      <Output>y1,y2</Output>
+    </PointSet>
+    <PointSet name="testData">
+      <Input>x1,x2</Input>
+      <Output>y1,y2</Output>
+    </PointSet>
+  </DataObjects>
+
+  <OutStreams>
+    <Plot name="plotResultY1">
+      <plotSettings>
+        <plot>
+          <type>scatter</type>
+          <x>trainData|Input|x1</x>
+          <y>trainData|Input|x2</y>
+          <z>trainData|Output|y1</z>
+          <c>red</c>
+          <marker>o</marker>
+          <kwargs>
+            <label>y1</label>
+          </kwargs>
+        </plot>
+        <plot>
+          <type>scatter</type>
+          <x>testData|Input|x1</x>
+          <y>testData|Input|x2</y>
+          <z>testData|Output|y1</z>
+          <c>black</c>
+          <marker>1</marker>
+          <kwargs>
+            <label>y1_hat</label>
+          </kwargs>
+        </plot>
+        <xlabel>x1</xlabel>
+        <ylabel>x2</ylabel>
+        <zlabel>y1</zlabel>
+        <legend>
+          <ncol>2</ncol>
+        </legend>
+      </plotSettings>
+      <actions>
+        <how>png</how>
+      </actions>
+    </Plot>
+    <Plot name="plotResultY2">
+      <plotSettings>
+        <plot>
+          <type>scatter</type>
+          <x>trainData|Input|x1</x>
+          <y>trainData|Input|x2</y>
+          <z>trainData|Output|y2</z>
+          <c>red</c>
+          <marker>o</marker>
+          <kwargs>
+            <label>y1</label>
+          </kwargs>
+        </plot>
+        <plot>
+          <type>scatter</type>
+          <x>testData|Input|x1</x>
+          <y>testData|Input|x2</y>
+          <z>testData|Output|y2</z>
+          <c>black</c>
+          <marker>1</marker>
+          <kwargs>
+            <label>y2_hat</label>
+          </kwargs>
+        </plot>
+        <xlabel>x1</xlabel>
+        <ylabel>x2</ylabel>
+        <zlabel>y2</zlabel>
+        <legend>
+          <ncol>2</ncol>
+        </legend>
+      </plotSettings>
+      <actions>
+        <how>png</how>
+      </actions>
+    </Plot>
+  </OutStreams>
+
+</Simulation>

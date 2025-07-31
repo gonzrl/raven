@@ -1,0 +1,121 @@
+<?xml version="1.0" ?>
+<Simulation verbosity="silent">
+
+  <RunInfo>
+    <WorkingDir>.</WorkingDir>
+    <Sequence>generateData,trainRom,sampleRom,plot</Sequence>
+  </RunInfo>
+
+  <Steps>
+    <MultiRun name="generateData">
+      <Input class="DataObjects" type="PointSet">inputPlaceHolder</Input>
+      <Sampler class="Samplers" type="MonteCarlo">sampler</Sampler>
+      <Model class="Models" type="ExternalModel">sparseModel</Model>
+      <Output class="DataObjects" type="PointSet">trainData</Output>
+    </MultiRun>
+    <RomTrainer name="trainRom">
+      <Input class="DataObjects" type="PointSet">trainData</Input>
+      <Output class="Models" type="ROM">theROM</Output>
+    </RomTrainer>
+    <MultiRun name="sampleRom">
+      <Input class="DataObjects" type="PointSet">inputPlaceHolder</Input>
+      <Sampler class="Samplers" type="MonteCarlo">sampler</Sampler>
+      <Model class="Models" type="ROM">theROM</Model>
+      <Output class="DataObjects" type="PointSet">testData</Output>
+    </MultiRun>
+    <IOStep name="plot">
+      <Input class="DataObjects" type="PointSet">trainData</Input>
+      <Input class="DataObjects" type="PointSet">testData</Input>
+      <Output class="OutStreams" type="Plot">plotResult</Output>
+    </IOStep>
+  </Steps>
+
+  <Models>
+    <ExternalModel ModuleToLoad="SparseRegressionModel" name="sparseModel" subType="">
+      <inputs>x</inputs>
+      <outputs>y</outputs>
+    </ExternalModel>
+    <ROM name="theROM" subType="SINDyRegression">
+      <Features>x</Features>
+      <Target>y</Target>
+      <stlqOptimizer>
+        <threshold>0.01</threshold>
+      </stlqOptimizer>
+      <polynomialFeatureLibrary>
+        <degree>4</degree>
+      </polynomialFeatureLibrary>
+      <FourierFeatureLibrary>
+        <n_frequencies>4</n_frequencies>
+      </FourierFeatureLibrary>
+    </ROM>
+  </Models>
+
+  <Samplers>
+    <MonteCarlo name="sampler">
+      <samplerInit>
+        <limit>50</limit>
+        <initialSeed>42</initialSeed>
+      </samplerInit>
+      <variable name="x">
+        <distribution>uni</distribution>
+      </variable>
+    </MonteCarlo>
+  </Samplers>
+
+  <Distributions>
+    <Uniform name="uni">
+      <lowerBound>-2</lowerBound>
+      <upperBound>2</upperBound>
+    </Uniform>
+  </Distributions>
+
+  <DataObjects>
+    <PointSet name="inputPlaceHolder">
+      <Input>x</Input>
+    </PointSet>
+    <PointSet name="trainData">
+      <Input>x</Input>
+      <Output>y</Output>
+    </PointSet>
+    <PointSet name="testData">
+      <Input>x</Input>
+      <Output>y</Output>
+    </PointSet>
+  </DataObjects>
+
+  <OutStreams>
+    <Plot name="plotResult">
+      <plotSettings>
+        <plot>
+          <type>scatter</type>
+          <x>trainData|Input|x</x>
+          <y>trainData|Output|y</y>
+          <c>red</c>
+          <marker>o</marker>
+          <kwargs>
+            <label>ground truth</label>
+          </kwargs>
+        </plot>
+        <plot>
+          <type>scatter</type>
+          <x>testData|Input|x</x>
+          <y>testData|Output|y</y>
+          <c>blue</c>
+          <marker>.</marker>
+          <kwargs>
+            <label>SINDy ROM</label>
+          </kwargs>
+        </plot>
+        <xlabel>x</xlabel>
+        <ylabel>y</ylabel>
+        <legend>
+          <ncol>2</ncol>
+        </legend>
+      </plotSettings>
+      <actions>
+        <how>png</how>
+      </actions>
+    </Plot>
+  </OutStreams>
+
+</Simulation>

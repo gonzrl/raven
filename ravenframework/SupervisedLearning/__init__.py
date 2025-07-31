@@ -18,6 +18,7 @@
 from .SupervisedLearning import SupervisedLearning
 from .ScikitLearn.ScikitLearnBase import ScikitLearnBase
 from .DMD.DMDBase import DMDBase
+from .SINDy.SINDyBase import SINDyBase
 from .KerasBase import KerasBase
 from .KerasRegression import KerasRegression
 from .KerasClassifier import KerasClassifier

@@ -22,16 +22,16 @@ from ..EntityFactoryBase import EntityFactory
 from .SupervisedLearning import SupervisedLearning
 
 ## internal developed or customized ROM
-from .GaussPolynomialRom import GaussPolynomialRom
-from .HDMRRom            import HDMRRom
-from .MSR                import MSR
-from .NDinvDistWeight    import NDinvDistWeight
-from .NDspline           import NDspline
-from .SyntheticHistory   import SyntheticHistory
-from .MultiResolutionTSA import MultiResolutionTSA
-from .pickledROM         import pickledROM
-from .PolyExponential    import PolyExponential
-from .SINDy              import SINDy
+from .GaussPolynomialRom    import GaussPolynomialRom
+from .HDMRRom               import HDMRRom
+from .MSR                   import MSR
+from .NDinvDistWeight       import NDinvDistWeight
+from .NDspline              import NDspline
+from .SyntheticHistory      import SyntheticHistory
+from .MultiResolutionTSA    import MultiResolutionTSA
+from .pickledROM            import pickledROM
+from .PolyExponential       import PolyExponential
+from .SINDy.SINDyRegression import SINDyRegression
 
 ## Dynamic Mode Decomposition-based methods
 from .DMD.DynamicModeDecompositionControl import DMDC
