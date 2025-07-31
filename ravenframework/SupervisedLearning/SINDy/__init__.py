@@ -12,11 +12,11 @@
 # # See the License for the specific language governing permissions and
 # # limitations under the License.
 # """
-#   The DMD folder includes different types of DMD based ROMs
+#   The SINDy folder includes different types of SINDy based ROMs
 #   that are available via RAVEN
 
-#   Created on July 21, 2024
-#   @author: Andrea Alfonsi
+#   Created on July 31, 2025
+#   @author: gonzrl
 # """
 # # These lines ensure that we do not have to do something like:
 from .SINDyBase import SINDyBase
