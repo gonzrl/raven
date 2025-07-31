@@ -47,6 +47,7 @@ from ...utils import InputData, InputTypes
   # - USE self.features AND self.target RATHER THAN feature_names INPUT
 
 # TO DO
+  # - ADD WARNING FOR MULTIPLE OPTIMIZERS
   # - CREATE DERIVATIVE ESTIMATION CASE
   # - USE HistorySet FOR TIME DEPENDENT CASE
   # - COMPLETE THE REQUIRED FUNCTIONS
@@ -264,14 +265,6 @@ class SINDyBase(SupervisedLearning):
     spec.addSub(addFourierFeatureLibrary())
     spec.addSub(addPolynomialFeatureLibrary())
 
-    ## OTHER SINDy PARAMETERS
-    spec.addSub(InputData.parameterInputFactory('t_default', contentType=InputTypes.FloatType, descr=r"""float, optional (default 1)
-                                                Default value for the time step.""", default=1))
-    spec.addSub(InputData.parameterInputFactory('discrete_time', contentType=InputTypes.BoolType, descr=r"""boolean, optional (default False)
-                                                If True, dynamical system is treated as a map. Rather than predicting derivatives, the right hand side functions
-                                                step the system forward by one time step. If False, dynamical system is assumed to be a flow (right-hand side functions
-                                                predict continuous time derivatives).""", default=False))
-
     return spec
 
   def _handleInput(self, paramInput):
@@ -285,16 +278,12 @@ class SINDyBase(SupervisedLearning):
     # if self.pivotParameterID not in self.target:
     #   self.raiseAnError(IOError,"The pivotParameter "+self.pivotParameterID+" must be part of the Target space!")
     super()._handleInput(paramInput)
-    # settings, notFound = paramInput.findNodesAndExtractValues(['polynomialFeatureLibrary'])
-    _, notFound = paramInput.findNodesAndExtractValues(['polynomialFeatureLibrary'])
-
-    # notFound must be empty
-    assert(not notFound)
+    # _, notFound = paramInput.findNodesAndExtractValues(['polynomialFeatureLibrary'])
+    # # notFound must be empty
+    # assert(not notFound)
 
     featureLibraries = []
-    optimizer = None
-    tDefault = 1                         # move this to SINDy child?
-    discreteTime = False                 # move this to SINDy child?
+    self.optimizer = None
     multipleOptimizerWarningPrinted = False
 
 
@@ -314,28 +303,23 @@ class SINDyBase(SupervisedLearning):
           featureLibraries.append(libraryMap(**args))
         elif optimizerMap is not None:
           args = {cchild.getName(): cchild.value for cchild in child.subparts}
-          if optimizer is not None and not multipleOptimizerWarningPrinted:
+          if self.optimizer is not None and not multipleOptimizerWarningPrinted:
             print("********************* Add warning here *********************")
             multipleOptimizerWarningPrinted = True
-          optimizer = optimizerMap(**args)
-        elif child.getName() == "t_default":
-          tDefault = child.value
-        elif child.getName() == "discrete_time":
-          discreteTime = child.value
+          self.optimizer = optimizerMap(**args)
 
-    # self.Target
     if not featureLibraries:
-      featureLibrary = ps.PolynomialLibrary()
+      self.featureLibrary = ps.PolynomialLibrary()
     else:
-      featureLibrary = ps.GeneralizedLibrary(featureLibraries)
+      self.featureLibrary = ps.GeneralizedLibrary(featureLibraries)
 
 
-    self.model = ps.SINDy(optimizer=optimizer,
-                          feature_library=featureLibrary,
-                          differentiation_method=None, # SINDy differentiation object
-                          feature_names=self.features, # Really only used in printing.
-                          t_default=tDefault,
-                          discrete_time=discreteTime)
+    # self.model = ps.SINDy(optimizer=optimizer,
+    #                       feature_library=featureLibrary,
+    #                       differentiation_method=None, # SINDy differentiation object
+    #                       feature_names=self.features, # Really only used in printing.
+    #                       t_default=tDefault,
+    #                       discrete_time=discreteTime)
 
   def _train(self,featureVals,targetVals):
     """

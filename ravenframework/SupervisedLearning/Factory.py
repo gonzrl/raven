@@ -32,6 +32,7 @@ from .MultiResolutionTSA    import MultiResolutionTSA
 from .pickledROM            import pickledROM
 from .PolyExponential       import PolyExponential
 from .SINDy.SINDyRegression import SINDyRegression
+from .SINDy.SINDy           import SINDy
 
 ## Dynamic Mode Decomposition-based methods
 from .DMD.DynamicModeDecompositionControl import DMDC

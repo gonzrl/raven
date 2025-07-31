@@ -15,7 +15,7 @@
   Created on July 31, 2025
 
   @author: gonzrl
-  Sparse regression via PySINDy libraries
+  Sparse Identification of Nonlinear Dynamical systems ROM Creation
 """
 
 #Internal Modules (Lazy Importer)--------------------------------------------------------------------
@@ -30,9 +30,10 @@ np = importModuleLazy("numpy")
 
 #Internal Modules------------------------------------------------------------------------------------
 from ...SupervisedLearning.SINDy import SINDyBase
+from ...utils import InputData, InputTypes
 #Internal Modules End--------------------------------------------------------------------------------
 
-class SINDyRegression(SINDyBase):
+class SINDy(SINDyBase):
   """
     This surrogate model performs sparse regression using the PySINDy library.
 
@@ -58,7 +59,29 @@ class SINDyRegression(SINDyBase):
       @ In, kwargs, dict, an arbitrary dictionary of keywords and values
     """
     super().__init__()
-    self.uniqueVals = None # flag to indicate targets only have a single unique value
+
+  @classmethod
+  def getInputSpecification(cls):
+    """
+      Method to get a reference to a class that specifies the input data for
+      class cls.
+      @ In, cls, the class for which we are retrieving the specification
+      @ Out, inputSpecification, InputData.ParameterInput, class to use for
+        specifying input of cls.
+    """
+
+    spec = super().getInputSpecification()
+    spec.description = r"""Add description"""
+
+    ## TIME PARAMETERS
+    spec.addSub(InputData.parameterInputFactory('t_default', contentType=InputTypes.FloatType, descr=r"""float, optional (default 1)
+                                                Default value for the time step.""", default=1))
+    spec.addSub(InputData.parameterInputFactory('discrete_time', contentType=InputTypes.BoolType, descr=r"""boolean, optional (default False)
+                                                If True, dynamical system is treated as a map. Rather than predicting derivatives, the right hand side functions
+                                                step the system forward by one time step. If False, dynamical system is assumed to be a flow (right-hand side functions
+                                                predict continuous time derivatives).""", default=False))
+    return spec
+
 
   def _handleInput(self, paramInput):
     """
@@ -68,9 +91,21 @@ class SINDyRegression(SINDyBase):
     """
     super()._handleInput(paramInput)
 
+    tDefault = 1
+    discreteTime = False
+
+    for child in paramInput.subparts:
+      if child.getName() == "t_default":
+        tDefault = child.value
+      elif child.getName() == "discrete_time":
+        discreteTime = child.value
+
     self.model = ps.SINDy(optimizer=self.optimizer,
-                          feature_library=self.featureLibrary,
-                          feature_names=self.features)
+                      feature_library=self.featureLibrary,
+                      differentiation_method=None, # SINDy differentiation object
+                      feature_names=self.features,
+                      t_default=tDefault,
+                      discrete_time=discreteTime)
 
   def _train(self,featureVals,targetVals):
     """
@@ -78,13 +113,17 @@ class SINDyRegression(SINDyBase):
       @ In, featureVals, numpy.ndarray, shape = (n_samples, n_dimensions), an array of input data
       @ In, targetVals, numpy.ndarray, shape = (n_samples, n_timeStep), an array of time series data
     """
+
     # check if all targets only have a single unique value, just store that value, no need to fit/train
     if all([len(np.unique(targetVals[:,index])) == 1 for index in range(targetVals.shape[1])]):
       self.uniqueVals = [np.unique(targetVals[:,index])[0] for index in range(targetVals.shape[1]) ]
     else:
       # the multi-target is handled by the internal wrapper
       self.uniqueVals = None
-      self.model.fit(x=featureVals, x_dot=targetVals) # x_dot is y
+      self.model.fit(x=featureVals, t=targetVals.flatten()) # CHEATING, THIS MUST BE CORRECTED
+      print("******************************************************************")
+      self.model.print()
+      print("******************************************************************")
 
   def __evaluateLocal__(self,featureVals):
     """
@@ -92,6 +131,7 @@ class SINDyRegression(SINDyBase):
       @ In, featureVals, np.array, list of values at which to evaluate the ROM
       @ Out, returnDict, dict, dict of all the target results
     """
+
     if self.uniqueVals is not None:
       outcomes =  self.uniqueVals
     else:

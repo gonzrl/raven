@@ -1,0 +1,94 @@
+<?xml version="1.0" ?>
+<Simulation verbosity="silent">
+
+  <RunInfo>
+    <WorkingDir>.</WorkingDir>
+    <Sequence>read, plot, trainRom</Sequence>
+  </RunInfo>
+
+  <Steps>
+    <!-- <IOStep name="read">
+      <Input class="Files" type="Input">csvInput</Input>
+      <Output class="DataObjects" type="HistorySet">myData</Output>
+    </IOStep> -->
+    <IOStep name="read">
+      <Input class="Files" type="Input">csvInput</Input>
+      <Output class="DataObjects" type="PointSet">myData</Output>
+    </IOStep>
+    <IOStep name="plot">
+      <Input class="DataObjects" type="PointSet">myData</Input>
+      <Output class="OutStreams" type="Plot">myPlot</Output>
+    </IOStep>
+    <RomTrainer name="trainRom">
+      <Input class="DataObjects" type="PointSet">myData</Input>
+      <Output class="Models" type="ROM">myROM</Output>
+    </RomTrainer>
+  </Steps>
+
+  <Files>
+    <Input name="csvInput">testData.csv</Input>
+  </Files>
+
+  <DataObjects>
+    <PointSet name="myData">
+      <Input>t,</Input>
+      <Output>x,y</Output>
+    </PointSet>
+    <!-- <HistorySet name='myData'>
+      <options>
+        <pivotParameter>t</pivotParameter>
+        <inputRow>1</inputRow>
+        <outputRow>-1</outputRow>
+      </options>
+      <Input></Input>
+      <Output>x,y</Output>
+    </HistorySet> -->
+  </DataObjects>
+
+  <Models>
+    <ROM name="myROM" subType="SINDy">
+      <Features>x,y</Features>
+      <Target>t</Target>
+      <polynomialFeatureLibrary>
+        <degree>2</degree>
+      </polynomialFeatureLibrary>
+      <!-- <discrete_time>True</discrete_time> -->
+    </ROM>
+  </Models>
+
+  <OutStreams>
+    <Plot name="myPlot">
+      <plotSettings>
+        <plot>
+          <type>scatter</type>
+          <x>myData|Input|t</x>
+          <y>myData|Output|x</y>
+          <c>red</c>
+          <marker>o</marker>
+          <kwargs>
+            <label>x</label>
+          </kwargs>
+        </plot>
+        <plot>
+          <type>scatter</type>
+          <x>myData|Input|t</x>
+          <y>myData|Output|y</y>
+          <c>blue</c>
+          <marker>o</marker>
+          <kwargs>
+            <label>y</label>
+          </kwargs>
+        </plot>
+        <xlabel>t</xlabel>
+        <legend>
+          <ncol>2</ncol>
+        </legend>
+      </plotSettings>
+      <actions>
+        <how>png</how>
+      </actions>
+    </Plot>
+  </OutStreams>
+
+
+</Simulation>
