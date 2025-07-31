@@ -18,6 +18,15 @@
   Sparse regression via PySINDy libraries
 """
 
+#Internal Modules (Lazy Importer)--------------------------------------------------------------------
+from ...utils.importerUtils import importModuleLazy
+#Internal Modules (Lazy Importer) End----------------------------------------------------------------
+
+#External Modules------------------------------------------------------------------------------------
+np = importModuleLazy("numpy")
+#External Modules End--------------------------------------------------------------------------------
+
+
 #Internal Modules------------------------------------------------------------------------------------
 from ...SupervisedLearning.SINDy import SINDyBase
 #Internal Modules End--------------------------------------------------------------------------------
@@ -49,6 +58,8 @@ class SINDyRegression(SINDyBase):
     """
     super().__init__()
 
+    self.uniqueVals = None # flag to indicate targets only have a single unique value
+
   def _handleInput(self, paramInput): # WHY DO I NEED THIS FUNCTION?
     """
       Function to handle the common parts of the model parameter input.
@@ -63,8 +74,14 @@ class SINDyRegression(SINDyBase):
       @ In, featureVals, numpy.ndarray, shape = (n_samples, n_dimensions), an array of input data
       @ In, targetVals, numpy.ndarray, shape = (n_samples, n_timeStep), an array of time series data
     """
+    # check if all targets only have a single unique value, just store that value, no need to fit/train
+    if all([len(np.unique(targetVals[:,index])) == 1 for index in range(targetVals.shape[1])]):
+      self.uniqueVals = [np.unique(targetVals[:,index])[0] for index in range(targetVals.shape[1]) ]
+    else:
+      # the multi-target is handled by the internal wrapper
+      self.uniqueVals = None
+      self.model.fit(x=featureVals, x_dot=targetVals) # x_dot is y
 
-    self.model.fit(x=featureVals, x_dot=targetVals) # x_dot is y
 
     # print("******************************************************************************")
     # self.model.print(lhs=self.target) # WHERE SHOULD THIS GO?
@@ -73,13 +90,25 @@ class SINDyRegression(SINDyBase):
 
   def __evaluateLocal__(self,featureVals):
     """
-      This method is used to inquire the SINDy model to evaluate (after normalization that in
-      this case is not performed) a set of points contained in featureVals.
-      @ In, featureVals, numpy.ndarray, shape= (n_requests, n_dimensions), an array of input data
-      @ Out, returnEvaluation , dict, dictionary of values for each target (and pivot parameter)
+      Evaluates a point.
+      @ In, featureVals, np.array, list of values at which to evaluate the ROM
+      @ Out, returnDict, dict, dict of all the target results
     """
 
-    # IN WHAT CASE IS n_requests > 1? THIS WILL NOT WORK
-    prediction = self.model.predict(featureVals)
-    prediction_flat = prediction.flatten()
-    return {self.target[i]: prediction_flat[i] for i in range(len(self.target))}
+    if self.uniqueVals is not None:
+      outcomes =  self.uniqueVals
+    else:
+      outcomes = self.model.predict(featureVals)
+
+    outcomes = np.atleast_1d(outcomes)
+    #possibilities for predict results are:
+    # (n_samples,) or (n_samples, n_targets)
+    if len(outcomes.shape) == 1 and len(self.target) == 1:
+      returnDict = {self.target[0]:outcomes}
+    elif len(outcomes.shape) == 1:
+      #this might only be possible for scikitlearn bugs
+      returnDict = {key:value for (key,value) in zip(self.target,outcomes)}
+    else:
+      returnDict = {key: outcomes[:, i] for i, key in enumerate(self.target)}
+
+    return returnDict
