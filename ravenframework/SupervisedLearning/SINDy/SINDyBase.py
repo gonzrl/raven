@@ -18,12 +18,13 @@
   Sparse Identification of Nonlinear Dynamical systems (SINDy) base class
 """
 
+
 #Internal Modules (Lazy Importer)--------------------------------------------------------------------
 from ...utils.importerUtils import importModuleLazy
 #Internal Modules (Lazy Importer) End----------------------------------------------------------------
 
 #External Modules------------------------------------------------------------------------------------
-# np = importModuleLazy("numpy")
+np = importModuleLazy("numpy")
 ps = importModuleLazy("pysindy")
 #External Modules End--------------------------------------------------------------------------------
 
@@ -33,72 +34,38 @@ from ...utils import InputData, InputTypes
 #Internal Modules End--------------------------------------------------------------------------------
 
 
-# ---------------------------------------------------------------------------------------------------
-# ---------------------------------------------------------------------------------------------------
-# QUESTIONS:
-  # - pivotParameterID IS t?
-  # - HOW TO HANDLE CustomLibrary? ParameterizedLibrary?
-  # - WHERE SHOULD THIS GO: self.model.print(lhs=self.target)
-  # - ONLY USE FEATURES WHEN DERIVATIVE INVOLVED?
-  # - USE NORMALIZATION
-  # - IS IT OKAY TO USE "SINDy" AND "Fourier" IN NAMING, DOES IT COMPLY WITH CAMELBACK?
+#########################################################################################################################
 
-# NOTES:
-  # - USE self.features AND self.target RATHER THAN feature_names INPUT
-
-# TO DO
-  # - ADD WARNING FOR MULTIPLE OPTIMIZERS
-  # - CREATE DERIVATIVE ESTIMATION CASE
-  # - USE HistorySet FOR TIME DEPENDENT CASE
-  # - COMPLETE THE REQUIRED FUNCTIONS
-  # - ADD OTHER SINDy PARAMETERS
-  # - ADD DESCRIPTIONS AND COMMENTS
-  # - CHECK WITH DEV FOR CODE FORMATING RULES
-# ---------------------------------------------------------------------------------------------------
-# ---------------------------------------------------------------------------------------------------
-
-
-
+#########################################################################################################################
 
 
 class SINDyBase(SupervisedLearning):
-  """
-    The SINDy (Sparse Identification of Nonlinear Dynamics) algorithm aims to construct a surrogate
-    model to identify the governing equations of a dynamical system using sparse regression.
-    The surrogate will have the form:
-    $\dot{x} = \Theta(X) \Xi$
-    where:
-      - $x$ is the state variable
-      - $\dot{x}$ is the time derivative of the state variable
-      - $\Theta(X)$ is the library of candidate functions (e.g., polynomials, trigonometric functions)
-      - $\Xi$ is the sparse coefficient matrix, indicating the active terms in the model
-  """
-
 
   def __init__(self):
-    """
-      SINDyBase constructor
-      @ In, kwargs, dict, an arbitrary dictionary of keywords and values
-    """
-
     super().__init__()
-    self.printTag                           = 'SINDy'    # Print tag
-    self.model                              = None       # the surrogate model itself {'target1':model,'target2':model, etc.}
+    # handling time series?
+    self._dynamicHandling = True
+    # # initial settings for the ROM (coming from input) # FROM DMDBASE NOT SURE IF NEEDED
+    # self.settings = {}
+    # SINDy-based model parameters (used in the initialization of the SINDy models)
+    self.SINDyParams = {}
+    # SINDy model
+    self.model = None
+
+    # target indeces (positions in self.target list)
+    self.targetIndices = None
+    # This flag is needed because the SINDy based model has an issue with single target (space dimension == 1)
+    self.singleTarget = False
+
+
 
   @classmethod
   def getInputSpecification(cls):
-    """
-      Method to get a reference to a class that specifies the input data for
-      class cls.
-      @ In, cls, the class for which we are retrieving the specification
-      @ Out, inputSpecification, InputData.ParameterInput, class to use for
-        specifying input of cls.
-    """
-    spec = super().getInputSpecification()
-    spec.description = r"""Add description"""
-
+    specs = super().getInputSpecification()
 
     ## SINDy OPTIMIZERS
+
+    ## ADD EnsembleOptimizer
 
     def addStlqOptimizer():
       stlqOptimizer = InputData.parameterInputFactory('stlqOptimizer', descr=r"""add desc""")
@@ -208,8 +175,8 @@ class SINDyBase(SupervisedLearning):
                                                         with unbiasing."""))
       return sr3Optimizer
 
-    spec.addSub(addStlqOptimizer())
-    spec.addSub(addSr3Optimizer())
+    specs.addSub(addStlqOptimizer())
+    specs.addSub(addSr3Optimizer())
 
     ## FEATURE LIBRARIES
 
@@ -261,31 +228,18 @@ class SINDyBase(SupervisedLearning):
                                                   but may slow down subsequent estimators."""))
       return polynomialFeatureLibrary
 
-    spec.addSub(addCustomFeatureLibrary())
-    spec.addSub(addFourierFeatureLibrary())
-    spec.addSub(addPolynomialFeatureLibrary())
+    specs.addSub(addCustomFeatureLibrary())
+    specs.addSub(addFourierFeatureLibrary())
+    specs.addSub(addPolynomialFeatureLibrary())
 
-    return spec
+    return specs
 
   def _handleInput(self, paramInput):
-    """
-      Function to handle the common parts of the model parameter input.
-      @ In, paramInput, InputData.ParameterInput, the already parsed input.
-      @ Out, None
-    """
-
-    # # check if the pivotParameter is among the targetValues
-    # if self.pivotParameterID not in self.target:
-    #   self.raiseAnError(IOError,"The pivotParameter "+self.pivotParameterID+" must be part of the Target space!")
     super()._handleInput(paramInput)
-    # _, notFound = paramInput.findNodesAndExtractValues(['polynomialFeatureLibrary'])
-    # # notFound must be empty
-    # assert(not notFound)
 
     featureLibraries = []
-    self.optimizer = None
+    optimizer = None
     multipleOptimizerWarningPrinted = False
-
 
     featureLibraryMapping = {
       'polynomialFeatureLibrary': ps.PolynomialLibrary,
@@ -303,105 +257,31 @@ class SINDyBase(SupervisedLearning):
           featureLibraries.append(libraryMap(**args))
         elif optimizerMap is not None:
           args = {cchild.getName(): cchild.value for cchild in child.subparts}
-          if self.optimizer is not None and not multipleOptimizerWarningPrinted:
-            print("********************* Add warning here *********************")
+          if optimizer is not None and not multipleOptimizerWarningPrinted:
+            self.raiseADebug(f"Two optimizers provided, but only one can be used. Using {optimizer}") ## PROPER WAY SHOW USER A WARNING?
             multipleOptimizerWarningPrinted = True
-          self.optimizer = optimizerMap(**args)
+          optimizer = optimizerMap(**args)
 
     if not featureLibraries:
-      self.featureLibrary = ps.PolynomialLibrary()
+      featureLibrary = ps.PolynomialLibrary()
     else:
-      self.featureLibrary = ps.GeneralizedLibrary(featureLibraries)
+      featureLibrary = ps.GeneralizedLibrary(featureLibraries)
+
+    self.SINDyParams['optimizer'] = optimizer
+    self.SINDyParams['featureLibrary'] = featureLibrary
 
 
-    # self.model = ps.SINDy(optimizer=optimizer,
-    #                       feature_library=featureLibrary,
-    #                       differentiation_method=None, # SINDy differentiation object
-    #                       feature_names=self.features, # Really only used in printing.
-    #                       t_default=tDefault,
-    #                       discrete_time=discreteTime)
+  def initializeModel(self, SINDyParams):
 
-  def _train(self,featureVals,targetVals):
-    """
-      Perform training on input database stored in featureVals.
-      @ In, featureVals, numpy.ndarray, shape = (n_samples, n_dimensions), an array of input data
-      @ In, targetVals, numpy.ndarray, shape = (n_samples, n_timeStep), an array of time series data
-    """
+    self.SINDyParams = SINDyParams
 
-    """
-    # fit(x: Any,
-    # t: Any | None = None,
-    # x_dot: Any | None = None,
-    # u: Any | None = None,
-    # multiple_trajectories: bool = False,
-    # unbias: bool = True,
-    # quiet: bool = False,
-    # ensemble: bool = False,
-    # library_ensemble: bool = False,
-    # replace: bool = True,
-    # n_candidates_to_drop: int = 1,
-    # n_subset: Any | None = None,
-    # n_models: Any | None = None,
-    # ensemble_aggregator: Any | None = None) -> Any
+    self.model = ps.SINDy(optimizer=self.SINDyParams['optimizer'],
+                  feature_library=self.SINDyParams['featureLibrary'],
+                  differentiation_method=self.SINDyParams['differentiationMethod'], # SINDy differentiation object
+                  # feature_names=self.features, # CAUSING ISSUE, ONLY GOOD FOR PRINTING MODEL
+                  t_default=self.SINDyParams['tDefault'])
 
-    # x: array-like or list of array-like, shape : n_samples, n_input_features
-    # Training data. If training data contains multiple trajectories, x should be a list containing data for each trajectory. Individual trajectories may contain different numbers of samples.
-
-    # t: float, numpy array of shape : n_samples, , or list of numpy arrays, optional (default None)
-    # If t is a float, it specifies the timestep between each sample. If array-like, it specifies the time at which each sample was collected. In this case the values in t must be strictly increasing. In the case of multi-trajectory training data, t may also be a list of arrays containing the collection times for each individual trajectory. If None, the default time step t_default will be used.
-
-    # x_dot: array-like or list of array-like, shape : n_samples, n_input_features , optional (default None)
-    # Optional pre-computed derivatives of the training data. If not provided, the time derivatives of the training data will be computed using the specified differentiation method. If x_dot is provided, it must match the shape of the training data and these values will be used as the time derivatives.
-
-    # u: array-like or list of array-like, shape : n_samples, n_control_features , optional (default None)
-    # Control variables/inputs. Include this variable to use sparse identification for nonlinear dynamical systems for control (SINDYc). If training data contains multiple trajectories (i.e. if x is a list of array-like), then u should be a list containing control variable data for each trajectory. Individual trajectories may contain different numbers of samples.
-
-    # multiple_trajectories: boolean, optional, : default False
-    # Whether or not the training data includes multiple trajectories. If True, the training data must be a list of arrays containing data for each trajectory. If False, the training data must be a single array.
-
-    # unbias: boolean, optional : default True
-    # Whether to perform an extra step of unregularized linear regression to unbias the coefficients for the identified support. If the optimizer (self.optimizer) applies any type of regularization, that regularization may bias coefficients toward particular values, improving the conditioning of the problem but harming the quality of the fit. Setting unbias==True enables an extra step wherein unregularized linear regression is applied, but only for the coefficients in the support identified by the optimizer. This helps to remove the bias introduced by regularization.
-
-    # quiet: boolean, optional : default False
-    # Whether or not to suppress warnings during model fitting.
-
-    # ensemble : boolean, optional (default False)
-    # This parameter is used to allow for "ensembling", i.e. the generation of many SINDy models (n_models) by choosing a random temporal subset of the input data (n_subset) for each sparse regression. This often improves robustness because averages (bagging) or medians (bragging) of all the models are usually quite high-performing. The user can also generate "distributions" of many models, and calculate how often certain library terms are included in a model.
-
-    # library_ensemble : boolean, optional (default False)
-    # This parameter is used to allow for "library ensembling", i.e. the generation of many SINDy models (n_models) by choosing a random subset of the candidate library terms to truncate. So, n_models are generated by solving n_models sparse regression problems on these "reduced" libraries. Once again, this often improves robustness because averages (bagging) or medians (bragging) of all the models are usually quite high-performing. The user can also generate "distributions" of many models, and calculate how often certain library terms are included in a model.
-
-    # replace : boolean, optional (default True)
-    # If ensemble true, whether or not to time sample with replacement.
-
-    # n_candidates_to_drop : int, optional (default 1)
-    # Number of candidate terms in the feature library to drop during library ensembling.
-
-    # n_subset : int, optional (default len(time base))
-    # Number of time points to use for ensemble
-
-    # n_models : int, optional (default 20)
-    # Number of models to generate via ensemble
-
-    # ensemble_aggregator : callable, optional (default numpy.median)
-    # Method to aggregate model coefficients across different samples. This method argument is only used if ensemble or library_ensemble is True. The method should take in a list of 2D arrays and return a 2D array of the same shape as the arrays in the list. Example: lambda x: np.median(x, axis=0)
-    """
-    self.model.fit(x=featureVals)
-    # self.model.fit(x=featureVals, x_dot=targetVals)
-
-  def __evaluateLocal__(self,featureVals):
-    """
-      This method is used to inquire the SINDy model to evaluate (after normalization that in
-      this case is not performed) a set of points contained in featureVals.
-      @ In, featureVals, numpy.ndarray, shape= (n_requests, n_dimensions), an array of input data
-      @ Out, returnEvaluation , dict, dictionary of values for each target (and pivot parameter)
-    """
-    return {'y': 0}
-    # prediction = self.model.predict(featureVals)
-    # prediction_flat = prediction.flatten()
-    # return {self.features[i]: prediction_flat[i] for i in range(len(self.features))}
-
-
+######
   def _localNormalizeData(self,values,names,feat):
     """
       Overwrites default normalization procedure.
@@ -413,12 +293,105 @@ class SINDyBase(SupervisedLearning):
     self.muAndSigmaFeatures[feat] = (0.0,1.0)
 
   def writeXMLPreamble(self, writeTo, targets = None):
-    pass
+    """
+      Specific local method for printing anything desired to xml file at the begin of the print.
+      @ In, writeTo, xmlUtils.StaticXmlElement instance, element to write to
+      @ In, targets, list, list of targets for whom information should be written.
+      @ Out, None
+    """
+    # add description
+    super().writeXMLPreamble(writeTo, targets)
+    description  = ' This XML file contains the main information of the SINDy-based ROM .'
+    description += ''
+    writeTo.addScalar('ROM',"description",description)
 
   def writeXML(self, writeTo, targets = None, skip = None):
-    pass
+    """
+      Adds requested entries to XML node.
+      @ In, writeTo, xmlTuils.StaticXmlElement, element to write to
+      @ In, targets, list, optional, list of targets for whom information should be written
+      @ In, skip, list, optional, list of targets to skip
+      @ Out, None
+    """
+    if not self.amITrained:
+      self.raiseAnError(RuntimeError,'ROM is not yet trained!')
+    if skip is None:
+      skip = []
+
+
+        # check what
+    # FROM DMDBASE
+
+    # what = ['features','timeScale','eigs','amplitudes','modes','dmdTimeScale'] + list(self.dmdParams.keys())
+    # if targets is None:
+    #   readWhat = what
+    # else:
+    #   readWhat = targets
+    # for s in skip:
+    #   if s in readWhat:
+    #     readWhat.remove(s)
+    # if not set(readWhat) <= set(what):
+    #   self.raiseAnError(IOError, "The following variables specified in <what> node are not recognized: "+ ",".join(np.setdiff1d(readWhat, what).tolist()) )
+    # else:
+    #   what = readWhat
+
+    # target = self.name
+    # toAdd = list(self.dmdParams.keys())
+
+    # for add in toAdd:
+    #   if add in what :
+    #     writeTo.addScalar(target,add,self.dmdParams[add])
+    # targNode = writeTo._findTarget(writeTo.getRoot(), target)
+    # if "features" in what:
+    #   writeTo.addScalar(target,"features",' '.join(self.features))
+    # if "timeScale" in what:
+    #   writeTo.addScalar(target,"timeScale",' '.join(['%.6e' % elm for elm in self.pivotValues.ravel()]))
+    # if "dmdTimeScale" in what:
+    #   writeTo.addScalar(target,"dmdTimeScale",' '.join(['%.6e' % elm for elm in self._getTimeScale()]))
+    # if "eigs" in what:
+    #   eigsReal = " ".join(['%.6e' % self.model._reference_dmd.eigs[indx].real for indx in
+    #                    range(len(self.model._reference_dmd.eigs))])
+    #   writeTo.addScalar("eigs","real", eigsReal, root=targNode)
+    #   eigsImag = " ".join(['%.6e' % self.model._reference_dmd.eigs.imag[indx] for indx in
+    #                            range(len(self.model._reference_dmd.eigs))])
+    #   writeTo.addScalar("eigs","imaginary", eigsImag, root=targNode)
+    # if "amplitudes" in what and 'amplitudes' in dir(self.model._reference_dmd) and self.model._reference_dmd.amplitudes is not None:
+    #   ampsReal = " ".join(['%.6e' % self.model._reference_dmd.amplitudes.real[indx] for indx in
+    #                    range(len(self.model._reference_dmd.amplitudes))])
+    #   writeTo.addScalar("amplitudes","real", ampsReal, root=targNode)
+    #   ampsImag = " ".join(['%.6e' % self.model._reference_dmd.amplitudes.imag[indx] for indx in
+    #                            range(len(self.model._reference_dmd.amplitudes))])
+    #   writeTo.addScalar("amplitudes","imaginary", ampsImag, root=targNode)
+    # if "modes" in what:
+    #   nSamples = self.featureVals.shape[0]
+    #   delays = max(1, int(self.model._reference_dmd.modes.shape[0] / nSamples))
+    #   loopCnt = 0
+    #   noSampled = False
+    #   if nSamples * delays !=  self.model._reference_dmd.modes.shape[0]:
+    #     nSamples = self.model._reference_dmd.modes.shape[0]
+    #     noSampled = True
+    #   for smp in range(nSamples):
+    #     valDict = {'real':'', 'imaginary': ''}
+    #     for _ in range(delays):
+    #       valDict['real'] += ' '.join([ '%.6e' % elm for elm in self.model._reference_dmd.modes[loopCnt,:].real]) + ' '
+    #       valDict['imaginary'] += ' '.join([ '%.6e' % elm for elm in self.model._reference_dmd.modes[loopCnt,:].imag]) +' '
+    #       loopCnt += 1
+    #     if noSampled:
+    #       attributeDict = {"index":f'{loopCnt}'}
+    #     else:
+    #       attributeDict = {self.features[index]:'%.6e' % self.featureVals[smp,index] for index in range(len(self.features))}
+    #     if delays > 1:
+    #       attributeDict['shape'] = f"({self.model._reference_dmd.modes.shape[1]},{delays})"
+    #     writeTo.addVector("modes","realization" if not noSampled else "element",valDict, root=targNode, attrs=attributeDict)
+
+
 
   def __confidenceLocal__(self,featureVals):
+    """
+      The confidence associate with a set of requested evaluations
+      @ In, featureVals, numpy.ndarray, shape= (n_requests, n_dimensions), an array of input data
+      @ Out, None
+    """
     pass
 
   def __resetLocal__(self,featureVals):
@@ -428,13 +401,23 @@ class SINDyBase(SupervisedLearning):
       @ Out, None
     """
     self.amITrained   = False
-    self.model        = None
+    self.model = {}
     self.pivotValues  = None
-    self.predictError = None
     self.featureVals  = None
 
   def __returnInitialParametersLocal__(self):
-    return {}
+    """
+      This method returns the initial parameters of the SM
+      @ In, None
+      @ Out, params, dict, the dict of the SM settings
+    """
+    return self.SINDyParams
 
   def __returnCurrentSettingLocal__(self):
-    return {}
+    """
+      This method is used to pass the set of parameters of the ROM that can change during simulation
+      @ In, None
+      @ Out, params, dict, the dict of the SM settings
+    """
+    return self.SINDyParams
+

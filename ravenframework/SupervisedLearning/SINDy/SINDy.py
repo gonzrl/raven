@@ -18,6 +18,7 @@
   Sparse Identification of Nonlinear Dynamical systems ROM Creation
 """
 
+
 #Internal Modules (Lazy Importer)--------------------------------------------------------------------
 from ...utils.importerUtils import importModuleLazy
 #Internal Modules (Lazy Importer) End----------------------------------------------------------------
@@ -34,31 +35,6 @@ from ...utils import InputData, InputTypes
 #Internal Modules End--------------------------------------------------------------------------------
 
 class SINDy(SINDyBase):
-  """
-    This surrogate model performs sparse regression using the PySINDy library.
-
-    The usual form of the problem SINDy solves:
-    $\dot{x} = \Theta(X) \Xi$
-    where:
-      - $x$ is the state variable
-      - $\dot{x}$ is the time derivative of the state variable
-      - $\Theta(X)$ is the library of candidate functions (e.g., polynomials, trigonometric functions)
-      - $\Xi$ is the sparse coefficient matrix, indicating the active terms in the model
-
-    In this special case:
-    $y = \Theta(X) \Xi$
-    where:
-      - $x$ is the independent variable
-      - $y$ is the dependent variable
-      - $\Theta(X)$ is the library of candidate functions (e.g., polynomials, trigonometric functions)
-      - $\Xi$ is the sparse coefficient matrix, indicating the active terms in the model
-  """
-  def __init__(self):
-    """
-      SINDyRegression constructor
-      @ In, kwargs, dict, an arbitrary dictionary of keywords and values
-    """
-    super().__init__()
 
   @classmethod
   def getInputSpecification(cls):
@@ -69,43 +45,44 @@ class SINDy(SINDyBase):
       @ Out, inputSpecification, InputData.ParameterInput, class to use for
         specifying input of cls.
     """
+    specs = super(SINDy, cls).getInputSpecification()
 
-    spec = super().getInputSpecification()
-    spec.description = r"""Add description"""
+    specs.addSub(InputData.parameterInputFactory('pivotParameter',contentType=InputTypes.StringType,
+                                                descr=r"""defines the pivot variable (e.g., time) that represents the
+                                                independent monotonic variable""", default='time'))
 
-    ## TIME PARAMETERS
-    spec.addSub(InputData.parameterInputFactory('t_default', contentType=InputTypes.FloatType, descr=r"""float, optional (default 1)
-                                                Default value for the time step.""", default=1))
-    spec.addSub(InputData.parameterInputFactory('discrete_time', contentType=InputTypes.BoolType, descr=r"""boolean, optional (default False)
-                                                If True, dynamical system is treated as a map. Rather than predicting derivatives, the right hand side functions
-                                                step the system forward by one time step. If False, dynamical system is assumed to be a flow (right-hand side functions
-                                                predict continuous time derivatives).""", default=False))
-    return spec
+
+
+    ## ADD DIFFERENTIATION PARAMETERS
+
+    return specs
 
 
   def _handleInput(self, paramInput):
     """
-      Function to handle the common parts of the model parameter input.
-      @ In, paramInput, InputData.ParameterInput, the already parsed input.
+      Function to handle the common parts of the distribution parameter input.
+      @ In, paramInput, ParameterInput, the already parsed input.
       @ Out, None
     """
+
     super()._handleInput(paramInput)
+    settings, notFound = paramInput.findNodesAndExtractValues(['pivotParameter'])
+    # notFound must be empty
+    assert(not notFound)
+    self.pivotParameterID  = settings.get("pivotParameter")  # pivot parameter
+    if self.pivotParameterID not in self.target:
+      self.raiseAnError(IOError,f"The pivotParameter {self.pivotParameterID} must be part of the Target space!")
+    if len(self.target) < 2:
+      self.raiseAnError(IOError,f"At least one Target in addition to the pivotParameter {self.pivotParameterID} must be part of the Target space!")
 
-    tDefault = 1
-    discreteTime = False
+    self.targetIndices = tuple([i for i,x in enumerate(self.target) if x != self.pivotID])
 
-    for child in paramInput.subparts:
-      if child.getName() == "t_default":
-        tDefault = child.value
-      elif child.getName() == "discrete_time":
-        discreteTime = child.value
+    # add parameters to SINDyParams set here
+    self.SINDyParams['differentiationMethod'] = None # DEFAULT
+    self.SINDyParams['tDefault'] = 1  # DEFAULT
 
-    self.model = ps.SINDy(optimizer=self.optimizer,
-                      feature_library=self.featureLibrary,
-                      differentiation_method=None, # SINDy differentiation object
-                      feature_names=self.features,
-                      t_default=tDefault,
-                      discrete_time=discreteTime)
+    self.initializeModel(self.SINDyParams)
+
 
   def _train(self,featureVals,targetVals):
     """
@@ -114,38 +91,31 @@ class SINDy(SINDyBase):
       @ In, targetVals, numpy.ndarray, shape = (n_samples, n_timeStep), an array of time series data
     """
 
-    # check if all targets only have a single unique value, just store that value, no need to fit/train
-    if all([len(np.unique(targetVals[:,index])) == 1 for index in range(targetVals.shape[1])]):
-      self.uniqueVals = [np.unique(targetVals[:,index])[0] for index in range(targetVals.shape[1]) ]
-    else:
-      # the multi-target is handled by the internal wrapper
-      self.uniqueVals = None
-      self.model.fit(x=featureVals, t=targetVals.flatten()) # CHEATING, THIS MUST BE CORRECTED
-      print("******************************************************************")
-      self.model.print()
-      print("******************************************************************")
+    pivotParamIndex   = self.target.index(self.pivotParameterID)
+    self.pivotValues  = targetVals[0,:,pivotParamIndex]
+
+    n = len(targetVals[0]) # IS THIS ALREADY AVAILABLE?
+    targetValsList = [targetVals[i][:,self.targetIndices] for i in range(targetVals.shape[0])]
+    featureValsList = [np.repeat([fv], n, axis=0) for fv in featureVals]
+    featureValsList = [np.column_stack((fv, self.pivotValues.reshape(n, 1))) for fv in featureValsList]
+
+    self.model.fit(x=featureValsList, x_dot=targetValsList, t=self.pivotValues, multiple_trajectories=True) # t not really used here because x_dot provided?
 
   def __evaluateLocal__(self,featureVals):
-    """
-      Evaluates a point.
-      @ In, featureVals, np.array, list of values at which to evaluate the ROM
-      @ Out, returnDict, dict, dict of all the target results
-    """
 
-    if self.uniqueVals is not None:
-      outcomes =  self.uniqueVals
-    else:
-      outcomes = self.model.predict(featureVals)
+    n = len(self.pivotValues)
+    featureValsRepeated = np.repeat(featureVals, n, axis=0)
+    featureValsWithTime = np.column_stack((featureValsRepeated, self.pivotValues.reshape(n, 1)))
+    result = self.model.predict(featureValsWithTime)
 
-    outcomes = np.atleast_1d(outcomes)
-    #possibilities for predict results are:
-    # (n_samples,) or (n_samples, n_targets)
-    if len(outcomes.shape) == 1 and len(self.target) == 1:
-      returnDict = {self.target[0]:outcomes}
-    elif len(outcomes.shape) == 1:
-      #this might only be possible for scikitlearn bugs
-      returnDict = {key:value for (key,value) in zip(self.target,outcomes)}
-    else:
-      returnDict = {key: outcomes[:, i] for i, key in enumerate(self.target)}
+    returnEvaluation = {self.pivotParameterID:self.pivotValues}
 
-    return returnDict
+    for i, index in enumerate(self.targetIndices):
+      target = self.target[index]
+      returnEvaluation[target] = np.array(result[:, i])
+
+    print("**********************************************************************************************")
+    print("featureVals:\n", featureVals)
+    print("returnEvaluation:\n", returnEvaluation)
+    print("**********************************************************************************************")
+    return returnEvaluation

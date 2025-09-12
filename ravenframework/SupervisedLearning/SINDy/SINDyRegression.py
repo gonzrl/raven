@@ -68,9 +68,11 @@ class SINDyRegression(SINDyBase):
     """
     super()._handleInput(paramInput)
 
-    self.model = ps.SINDy(optimizer=self.optimizer,
-                          feature_library=self.featureLibrary,
-                          feature_names=self.features)
+    self.SINDyParams['differentiationMethod'] = None # DEFAULT
+    self.SINDyParams['tDefault'] = 1  # DEFAULT
+
+    self.initializeModel(self.SINDyParams)
+
 
   def _train(self,featureVals,targetVals):
     """

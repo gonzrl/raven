@@ -1,94 +1,129 @@
-<?xml version="1.0" ?>
-<Simulation verbosity="silent">
+<?xml version="1.0"?>
+<Simulation verbosity="debug">
 
   <RunInfo>
-    <WorkingDir>.</WorkingDir>
-    <Sequence>read, plot, trainRom</Sequence>
+    <WorkingDir>SINDyROMResults</WorkingDir>
+    <Sequence>
+             readIn,
+             ROMTrain,
+             pickleROM,
+             stats,
+             runSINDy,
+             writeOut
+    </Sequence>
+    <batchSize>1</batchSize>
   </RunInfo>
 
-  <Steps>
-    <!-- <IOStep name="read">
-      <Input class="Files" type="Input">csvInput</Input>
-      <Output class="DataObjects" type="HistorySet">myData</Output>
-    </IOStep> -->
-    <IOStep name="read">
-      <Input class="Files" type="Input">csvInput</Input>
-      <Output class="DataObjects" type="PointSet">myData</Output>
-    </IOStep>
-    <IOStep name="plot">
-      <Input class="DataObjects" type="PointSet">myData</Input>
-      <Output class="OutStreams" type="Plot">myPlot</Output>
-    </IOStep>
-    <RomTrainer name="trainRom">
-      <Input class="DataObjects" type="PointSet">myData</Input>
-      <Output class="Models" type="ROM">myROM</Output>
-    </RomTrainer>
-  </Steps>
-
   <Files>
-    <Input name="csvInput">testData.csv</Input>
+    <Input name="rawDataFile">../../../PolyExponential/data/decay_heat.csv</Input>
+    <Input name="ROMpk" type="">ROMpk</Input>
   </Files>
 
-  <DataObjects>
-    <PointSet name="myData">
-      <Input>t,</Input>
-      <Output>x,y</Output>
-    </PointSet>
-    <!-- <HistorySet name='myData'>
-      <options>
-        <pivotParameter>t</pivotParameter>
-        <inputRow>1</inputRow>
-        <outputRow>-1</outputRow>
-      </options>
-      <Input></Input>
-      <Output>x,y</Output>
-    </HistorySet> -->
-  </DataObjects>
+  <Distributions>
+    <Uniform name="enrichmentDist">
+      <lowerBound>3.4</lowerBound>
+      <upperBound>9.9</upperBound>
+    </Uniform>
+    <Uniform name="burnupDist">
+      <lowerBound>16.501</lowerBound>
+      <upperBound>26.402</upperBound>
+    </Uniform>
+  </Distributions>
+
+  <Samplers>
+    <MonteCarlo name="mcSampler">
+      <samplerInit>
+        <limit>4</limit>
+        <initialSeed>20021986</initialSeed>
+      </samplerInit>
+      <variable name="enrichment">
+        <distribution>enrichmentDist</distribution>
+      </variable>
+      <variable name="burnup">
+        <distribution>burnupDist</distribution>
+      </variable>
+    </MonteCarlo>
+  </Samplers>
 
   <Models>
-    <ROM name="myROM" subType="SINDy">
-      <Features>x,y</Features>
-      <Target>t</Target>
+    <ROM name="SINDyROM" subType="SINDy">
+      <Target>t,decay_heat,decay_heat_pu</Target>
+      <Features>enrichment,burnup</Features>
+      <pivotParameter>t</pivotParameter>
+      <stlqOptimizer>
+        <threshold>0.001</threshold>
+      </stlqOptimizer>
+      <stlqOptimizer>
+        <threshold>0.003</threshold>
+      </stlqOptimizer>
       <polynomialFeatureLibrary>
-        <degree>2</degree>
+        <degree>4</degree>
       </polynomialFeatureLibrary>
-      <!-- <discrete_time>True</discrete_time> -->
     </ROM>
   </Models>
 
+  <Steps>
+    <IOStep name="readIn">
+      <Input class="Files" type="">rawDataFile</Input>
+      <Output class="DataObjects" type="HistorySet">rawData</Output>
+    </IOStep>
+    <RomTrainer name="ROMTrain">
+      <Input class="DataObjects" type="HistorySet">rawData</Input>
+      <Output class="Models" type="ROM">SINDyROM</Output>
+    </RomTrainer>
+    <IOStep name="pickleROM">
+      <Input class="Models" type="ROM">SINDyROM</Input>
+      <Output class="Files" type="">ROMpk</Output>
+    </IOStep>
+    <IOStep name="stats">
+      <Input class="Models" type="ROM">SINDyROM</Input>
+      <Output class="DataObjects" type="DataSet">romStats</Output>
+    </IOStep>
+    <MultiRun name="runSINDy">
+      <Input class="DataObjects" type="PointSet">dataIn</Input>
+      <Model class="Models" type="ROM">SINDyROM</Model>
+      <Sampler class="Samplers" type="MonteCarlo">mcSampler</Sampler>
+      <Output class="DataObjects" type="HistorySet">synDataSINDy</Output>
+    </MultiRun>
+    <IOStep name="writeOut" pauseAtEnd="True">
+      <Input class="DataObjects" type="HistorySet">synDataSINDy</Input>
+      <Input class="DataObjects" type="DataSet">romStats</Input>
+      <Output class="OutStreams" type="Print">outputSINDy</Output>
+      <Output class="OutStreams" type="Print">ROMCoefficientsXML</Output>
+    </IOStep>
+  </Steps>
+
   <OutStreams>
-    <Plot name="myPlot">
-      <plotSettings>
-        <plot>
-          <type>scatter</type>
-          <x>myData|Input|t</x>
-          <y>myData|Output|x</y>
-          <c>red</c>
-          <marker>o</marker>
-          <kwargs>
-            <label>x</label>
-          </kwargs>
-        </plot>
-        <plot>
-          <type>scatter</type>
-          <x>myData|Input|t</x>
-          <y>myData|Output|y</y>
-          <c>blue</c>
-          <marker>o</marker>
-          <kwargs>
-            <label>y</label>
-          </kwargs>
-        </plot>
-        <xlabel>t</xlabel>
-        <legend>
-          <ncol>2</ncol>
-        </legend>
-      </plotSettings>
-      <actions>
-        <how>png</how>
-      </actions>
-    </Plot>
+    <Print name="outputSINDy" dir="outputSINDy">
+      <type>csv</type>
+      <source>synDataSINDy</source>
+    </Print>
+    <Print name="ROMCoefficientsXML">
+      <type>csv</type>
+      <source>romStats</source>
+    </Print>
   </OutStreams>
 
+  <DataObjects>
+    <PointSet name="dataIn">
+      <Input>enrichment,burnup</Input>
+      <Output>OutputPlaceHolder</Output>
+    </PointSet>
+    <HistorySet name="rawData">
+      <Input>enrichment,burnup</Input>
+      <Output>decay_heat,decay_heat_pu</Output>
+      <options>
+        <pivotParameter>t</pivotParameter>
+      </options>
+    </HistorySet>
+    <HistorySet name="synDataSINDy">
+      <Input>enrichment,burnup</Input>
+      <Output>decay_heat,decay_heat_pu</Output>
+      <options>
+        <pivotParameter>t</pivotParameter>
+      </options>
+    </HistorySet>
+    <DataSet name="romStats"/>
+  </DataObjects>
 
 </Simulation>
